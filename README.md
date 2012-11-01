@@ -28,7 +28,7 @@ Build and install it:
 Usage
 -----
 
-  usage: muse [-h|--help] <music file>
+	usage: muse [-h|--help] <music file>
 
 Roadmap
 -------
