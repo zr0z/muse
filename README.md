@@ -1,7 +1,7 @@
 muse
 ====
 
-**muse** is a stupid command line mp3 player for osx. It is build in Objective-C on top of the `AVFoundation` framework and doesn't require any external libraries.
+**muse** is a stupid command line mp3 player for osx. It is built in Objective-C on top of the `AVFoundation` framework and doesn't require any external libraries.
 
 **muse** is released under the MIT license.
 
