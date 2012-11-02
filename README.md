@@ -11,6 +11,10 @@ Currently, it is too dumb to read more than one file at a time, but you can read
 
 If you want to quit **muse** during play `Ctrl-C` is your best friend.
 
+One-line install
+-----------------
+
+    curl -L https://raw.github.com/zr0z/muse/master/muse-install.sh | sh
 
 Building from git
 -----------------
