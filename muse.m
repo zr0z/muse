@@ -57,7 +57,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // Instance method which construct a description based on the domain
 // and the `NSLocalizedDescriptionKey`.
 - (NSString *)description {
-  return [NSString stringWithFormat:@"%@: error: %@", self.domain
+  return [NSString stringWithFormat:@"%@: error: %@", self.domain,
       self.localizedDescription];
 }
 @end
@@ -65,56 +65,68 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // ## MuseAsset Class
 
 // ### Class interface.
-// The `MuseAsset` Class extends `AVURLAsset` to add some metadatas
-// as properties of the instance.
+// The `MuseAsset` Class use an instance of the `AVURLAsset` class
+// to store some metadatas as properties of the instance.
 //
-// The added properties are:
+// The main property is the `URL` used to create the `AVURLAsset`.
+//
+// The metadatas properties are:
 //
 // * `length`, duration of the asset in seconds,
 // * `artist`, name of the artist if present in the `commonMetadata`,
 // * `album`, name of the album if present in the `commonMetadata`,
 // * `label`, label constructed from the other properties,
 // * `title`, title of the asset if present in the `commonMetadata`.
-@interface MuseAsset : AVURLAsset {
-  int length;
-  NSString* title;
-  NSString* artist;
-  NSString* album;
-  NSString* label;
+@interface MuseAsset : NSObject {
+  int _length;
+  NSString* _title;
+  NSString* _artist;
+  NSString* _album;
+  NSString* _label;
+  NSURL* _URL;
 }
 @property (nonatomic, assign) int length;
 @property (nonatomic, strong) NSString* artist;
 @property (nonatomic, strong) NSString* album;
 @property (nonatomic, strong) NSString* label;
 @property (nonatomic, strong) NSString* title;
+@property (nonatomic, strong) NSURL* URL;
 + (MuseAsset *)museAssetWithURL:(NSURL *)URL;
 - (id)initWithURL:(NSURL *)URL;
-- (NSString *)metadataForKey:(NSString*)key;
+- (NSString *)metadataForKey:(NSString*)key inArray:(NSArray*)metadata;
 @end
 
 // ### Class implementation.
 @implementation MuseAsset
-@synthesize length;
-@synthesize title;
-@synthesize artist;
-@synthesize album;
-@synthesize label;
+@synthesize length = _length;
+@synthesize title = _title;
+@synthesize artist = _artist;
+@synthesize album = _album;
+@synthesize label = _label;
+@synthesize URL = _URL;
 // Class methods that create a new instance using an URL.
 + (MuseAsset *)museAssetWithURL:(NSURL *)URL {
   return [[self alloc] initWithURL:URL];
 }
-// The `initWithURL` initialize each additional properties.
+// The `initWithURL` initialize each properties and the asset instance.
 - (id)initWithURL:(NSURL *)URL {
-  self = [super initWithURL:URL options:nil];
-  if(self){
+  self = [super init];
+  // Create the `AVURLAsset` instance using the `URL`.
+  AVURLAsset* asset = [AVURLAsset URLAssetWithURL:URL options:nil];
+  if(self && asset){
+    // Assign `MuseAsset` url.
+    self.URL = URL;
     // Calculate the track `length` in seconds using the `value`
     // and the `timescale` of the `duration` metadata.
-    self.length = self.duration.value / self.duration.timescale;
-    // Extract the other properties from the `commonMetadata` property
-    // of the asset calling the `metadataForKey` method.
-    self.title = [self metadataForKey:@"title"];
-    self.artist = [self metadataForKey:@"artist"];
-    self.album = [self metadataForKey:@"albumName"];
+    self.length = asset.duration.value / asset.duration.timescale;
+    // initialize the metadata array using the `commonMetadata` property
+    // of the asset.
+    NSArray* metadata = asset.commonMetadata;
+    // Extract the other properties from the metadata array
+    // calling the `metadataForKey:inArray:` method.
+    self.title = [self metadataForKey:@"title" inArray:metadata];
+    self.artist = [self metadataForKey:@"artist" inArray:metadata];
+    self.album = [self metadataForKey:@"albumName" inArray:metadata];
     // Transform the track `length` (in seconds) in a duration in minutes
     // and seconds, using a formated string.
     NSString* durationString = [NSString stringWithFormat:@"%02d:%02d",
@@ -127,11 +139,10 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 }
 // Parse a `NSArray` of `AVMetadataItem` using a `NSString`
 // as the common key.
-- (NSString *)metadataForKey:(NSString*)key {
-  // Get the metadata from the asset.
-  NSArray* collected = [AVMetadataItem metadataItemsFromArray:
-    self.commonMetadata withKey:key
-    keySpace: AVMetadataKeySpaceCommon];
+- (NSString *)metadataForKey:(NSString*)key inArray:(NSArray*)metadata {
+  // Parse the metadata from the asset.
+  NSArray* collected = [AVMetadataItem metadataItemsFromArray:metadata
+    withKey:key keySpace: AVMetadataKeySpaceCommon];
   // Return the corresponding `NSString` if found or the `@"Unknown"` string.
   if([collected count] > 0){
       return ( (AVMetadataItem*) collected[0] ).stringValue;
@@ -157,24 +168,23 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // ### Class implementation.
 @implementation MusePlayer
 @synthesize currentSong;
-// Class methods that create a new instance using an URL.
+// Class methods that create a new instance using an `URL`.
 + (id) playerWithURL:(NSURL*)URL error:(NSError **)error {
   return [[self alloc] initWithURL:URL error:error];
 }
-// The `initWithURL` method tests if the `URL` is reachable
+// The `initWithURL:error:` method tests if the `URL` is reachable
 // and add a new asset if no errors were raised.
-// It then calls the `prepareToPlay` method to set the player
-// and start the buffering of the asset.
 - (id) initWithURL:(NSURL*)URL error:(NSError **)error {
   self = [super init];
-  [URL checkResourceIsReachableAndReturnError: error];
-  if(self && !error){
+  if(self && [URL checkResourceIsReachableAndReturnError:error]){
     [self addAssetWithURL:URL error:error];
+    // Call the `prepareToPlay` method to set the player
+    // and start the buffering of the asset.
     [self prepareToPlay];
   }
   return self;
 }
-// Create an asset using its url and a nil NSError instance.
+// Create an asset using its url and a pointer to a `NSError` instance.
 - (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error {
   self.currentSong = [MuseAsset museAssetWithURL:URL];
   // Return an error if the file has no length.
@@ -187,10 +197,11 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
   player = [[AVAudioPlayer alloc] initWithContentsOfURL:self.currentSong.URL error:nil];
   return [player prepareToPlay];
 }
-//
+// Wrapper around the `isPlaying` method of the player.
 - (BOOL)isPlaying {
   return [player isPlaying];
 }
+// Wrapper around the `play` method of the player.
 - (BOOL)play {
   return [player play];
 }
@@ -202,7 +213,7 @@ int main (int argc, const char * argv[]) {
         // Get the arguments from the command line. **muse** accepts
         // either a help option (`[-h|--help]`) or a file.
         NSArray* arguments = [[NSProcessInfo processInfo] arguments];
-        // Test if the help option  (`[-h|--help]`) is present
+        // Test if the help option (`[-h|--help]`) is present
         // in the arguments list.
         if([arguments containsObject:@"-h"]
           || [arguments containsObject:@"--help"]){
@@ -215,18 +226,13 @@ int main (int argc, const char * argv[]) {
             ouptut([NSError museErrorInputFile].description);
             return 1;
         }
-        NSRange range;
-        range.location = 1;
-        range.length = length - 1;
-
-        NSArray* assets = [arguments subarrayWithRange:range];
         // Get the url of the media file.
         // > TODO: add multiple file and directory handling.
         NSURL* url = [NSURL fileURLWithPath:arguments[1]];
         NSError* error = nil;
         MusePlayer* muse = [MusePlayer playerWithURL:url error:&error];
         // Return an error if the file is not a media file.
-        if(error){
+        if(error != nil){
           ouptut(error.description);
           return 1;
         }
