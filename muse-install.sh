@@ -11,4 +11,4 @@ make && make install
 cd ..
 rm -Rf $TARGET_DIR
 
-echo "Muse installation complete. Enjoy."
+echo "muse installation complete. Enjoy."

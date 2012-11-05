@@ -11,13 +11,16 @@ Currently, it is too dumb to read more than one file at a time, but you can read
 
 If you want to quit **muse** during play `Ctrl-C` is your best friend.
 
-One-line install
------------------
+Installation
+------------
+
+You will need the XCode command line tools (with LLVM 4.0+).
+
+### One-line install
 
     curl -L https://raw.github.com/zr0z/muse/master/muse-install.sh | sh
 
-Building from git
------------------
+### Building from git
 
 Grab a copy of the source code:
 
@@ -27,7 +30,8 @@ Build and install it:
 
 	make && make install
 
-**muse** is intalled in your `/usr/local/bin` and depending on your permissions, you may have to install it with `sudo`.
+**muse** will be installed in your `/usr/local/bin`.  
+Depending on your permissions, you may have to use `sudo make install` to finalize the installation.
 
 Usage
 -----
@@ -41,3 +45,9 @@ Roadmap
 * Directory support.
 * JSON playlist.
 * Commands (play/pause, previous, next, repeat…).
+
+Changelog
+---------
+
+* 0.2, switch to a more classical Objective-C OOP structure.
+* 0.1, initial release, quick and dirty Objective-C command line application.
