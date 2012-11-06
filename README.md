@@ -5,16 +5,14 @@ muse
 
 **muse** is released under the MIT license.
 
-Currently, it is too dumb to read more than one file at a time, but you can read a whole directory by doing a loop on all the mp3 files:
-
-	$ for tune in *.mp3; do muse $tune; done;
+Since version 0.3, **muse** is a bit smarter and you can read multiple mp3 files using a wildcard (such as `*.mp3`) on the command line or passing several files as arguments.
 
 If you want to quit **muse** during play `Ctrl-C` is your best friend.
 
 Installation
 ------------
 
-You will need the XCode command line tools (with LLVM 4.0+).
+You will need Lion or Mountain Lion and the latest XCode command line tools (with LLVM 4.0+).
 
 ### One-line install
 
@@ -36,12 +34,11 @@ Depending on your permissions, you may have to use `sudo make install` to finali
 Usage
 -----
 
-	usage: muse [-h|--help] <music file>
+	usage: muse [-h|--help] <music files>
 
 Roadmap
 -------
 
-* Multiple song support.
 * Directory support.
 * JSON playlist.
 * Commands (play/pause, previous, next, repeat…).
@@ -49,5 +46,6 @@ Roadmap
 Changelog
 ---------
 
+* 0.3, Multiple songs support, rewrite code according to [The Code Commandments](http://ironwolf.dangerousgames.com/blog/archives/913) best practices for Objective-C coding.
 * 0.2, switch to a more classical Objective-C OOP structure.
 * 0.1, initial release, quick and dirty Objective-C command line application.

@@ -1,4 +1,4 @@
-// muse 0.2,
+// muse 0.3,
 // the stupid command line mp3 player for osx.
 
 // *muse may be freely distributed under the MIT license.*
@@ -9,11 +9,13 @@
 
 // Uses arc memory management.
 
+// Uses [The Code Commandments](http://ironwolf.dangerousgames.com/blog/archives/913) best practices for Objective-C coding.
+
 // ## Helpers declaration
 
 // Define the usage description printed when executing the command
 // with a help option (`[-h|--help]`).
-#define USAGE @"usage: muse [-h|--help] <music file>"
+#define USAGE @"usage: muse [-h|--help] <music files>"
 
 // `output` is an helper function to display `NSString` on `stdout`.
 void ouptut(NSString* string);
@@ -34,7 +36,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // Create a category on NSError for muse with two default class methods
 // that correspond to the customs errors.
 //
-// The category add also an instance method which construct a description
+// The category adds also an instance method which constructs a description
 // based on the error domain and the error `NSLocalizedDescriptionKey`.
 @interface NSError(MusePlayer)
 + (NSError *)museErrorInputFile;
@@ -54,7 +56,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
   NSDictionary *info = @{NSLocalizedDescriptionKey: MPErrorFileType};
   return [self errorWithDomain:MPErrorDomain code:2 userInfo:info];
 }
-// Instance method which construct a description based on the domain
+// Instance method which constructs a description based on the domain
 // and the `NSLocalizedDescriptionKey`.
 - (NSString *)description {
   return [NSString stringWithFormat:@"%@: error: %@", self.domain,
@@ -62,11 +64,11 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 }
 @end
 
-// ## MuseAsset Class
+// ## MuseAsset class
 
 // ### Class interface.
-// The `MuseAsset` Class use an instance of the `AVURLAsset` class
-// to store some metadatas as properties of the instance.
+// The `MuseAsset` class uses an instance of the `AVURLAsset` class
+// to extract some metadatas and store them as properties of the instance.
 //
 // The main property is the `URL` used to create the `AVURLAsset`.
 //
@@ -77,20 +79,15 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // * `album`, name of the album if present in the `commonMetadata`,
 // * `label`, label constructed from the other properties,
 // * `title`, title of the asset if present in the `commonMetadata`.
-@interface MuseAsset : NSObject {
-  int _length;
-  NSString* _title;
-  NSString* _artist;
-  NSString* _album;
-  NSString* _label;
-  NSURL* _URL;
-}
-@property (nonatomic, assign) int length;
-@property (nonatomic, strong) NSString* artist;
-@property (nonatomic, strong) NSString* album;
-@property (nonatomic, strong) NSString* label;
-@property (nonatomic, strong) NSString* title;
-@property (nonatomic, strong) NSURL* URL;
+@interface MuseAsset : NSObject
+
+@property (assign, nonatomic) int length;
+@property (strong, nonatomic) NSString* artist;
+@property (strong, nonatomic) NSString* album;
+@property (strong, nonatomic) NSString* label;
+@property (strong, nonatomic) NSString* title;
+@property (strong, nonatomic) NSURL* URL;
+
 + (MuseAsset *)museAssetWithURL:(NSURL *)URL;
 - (id)initWithURL:(NSURL *)URL;
 - (NSString *)metadataForKey:(NSString*)key inArray:(NSArray*)metadata;
@@ -98,17 +95,19 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 
 // ### Class implementation.
 @implementation MuseAsset
-@synthesize length = _length;
-@synthesize title = _title;
-@synthesize artist = _artist;
-@synthesize album = _album;
-@synthesize label = _label;
-@synthesize URL = _URL;
-// Class methods that create a new instance using an URL.
+
+@synthesize length = length_;
+@synthesize title  = title_;
+@synthesize artist = artist_;
+@synthesize album  = album_;
+@synthesize label  = label_;
+@synthesize URL    = URL_;
+
+// Class method that create a new instance using an URL.
 + (MuseAsset *)museAssetWithURL:(NSURL *)URL {
   return [[self alloc] initWithURL:URL];
 }
-// The `initWithURL` initialize each properties and the asset instance.
+// The `initWithURL` initialize each properties using the asset instance.
 - (id)initWithURL:(NSURL *)URL {
   self = [super init];
   // Create the `AVURLAsset` instance using the `URL`.
@@ -125,15 +124,25 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
     // Extract the other properties from the metadata array
     // calling the `metadataForKey:inArray:` method.
     self.title = [self metadataForKey:@"title" inArray:metadata];
+    if(self.title == nil){
+      self.title = [[self.URL lastPathComponent] stringByDeletingPathExtension];
+    }
     self.artist = [self metadataForKey:@"artist" inArray:metadata];
+    if(self.artist == nil){
+      self.artist = @"Unknown";
+    }
     self.album = [self metadataForKey:@"albumName" inArray:metadata];
     // Transform the track `length` (in seconds) in a duration in minutes
     // and seconds, using a formated string.
     NSString* durationString = [NSString stringWithFormat:@"%02d:%02d",
       self.length / 60, self.length % 60];
     // Compose the label property using the other properties.
-    self.label = [NSString stringWithFormat:@"%@ - %@ (%@)\n%@\n",
-      self.title, self.artist, durationString, self.album];
+    self.label = [NSString stringWithFormat:@"%@ - %@ (%@)\n",
+      self.title, self.artist, durationString];
+    if(self.album != nil){
+      self.label = [self.label stringByAppendingFormat:@"%@\n",
+        self.album];
+    }
   }
   return self;
 }
@@ -143,112 +152,195 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
   // Parse the metadata from the asset.
   NSArray* collected = [AVMetadataItem metadataItemsFromArray:metadata
     withKey:key keySpace: AVMetadataKeySpaceCommon];
-  // Return the corresponding `NSString` if found or the `@"Unknown"` string.
+  NSString* value;
+  // Return the corresponding `NSString` if found.
   if([collected count] > 0){
-      return ( (AVMetadataItem*) collected[0] ).stringValue;
+      value = ( (AVMetadataItem*) collected[0] ).stringValue;
   }
-  return @"Unknown";
+  return value;
 }
 @end
 
 // ## MusePlayer class
 // ### Class interface.
-@interface MusePlayer : NSObject {
-  AVAudioPlayer *player;
-  MuseAsset *currentSong;
-}
-@property (nonatomic, strong) MuseAsset *currentSong;
-+ (id) playerWithURL:(NSURL*)URL error:(NSError **)error;
-- (id) initWithURL:(NSURL*)URL error:(NSError **)error;
+
+// The `MusePlayer` class is responsible for managing the list of assets
+// and controling the `AVAudioPlayer` instance.
+
+// It implements several methods that are just wrappers around the player
+// methods themselves.
+@interface MusePlayer : NSObject <AVAudioPlayerDelegate>
+
+@property (assign, nonatomic) int track;
+@property (strong, nonatomic) AVAudioPlayer *player;
+@property (strong, nonatomic) MuseAsset *current;
+@property (copy, nonatomic) NSArray *assets;
+
++ (MusePlayer *) playerWithResources:(NSArray*)resources
+  error:(NSError **)error;
+- (id) initWithResources:(NSArray*)resources error:(NSError **)error;
 - (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error;
-- (BOOL)prepareToPlay;
+- (BOOL)prepareToPlayTrackAt:(int)track;
 - (BOOL)isPlaying;
 - (BOOL)play;
+- (void)pause;
+- (BOOL)previous;
+- (BOOL)next;
+- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
+  error:(NSError *)error;
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
+  successfully:(BOOL)flag;
 @end
 // ### Class implementation.
 @implementation MusePlayer
-@synthesize currentSong;
-// Class methods that create a new instance using an `URL`.
-+ (id) playerWithURL:(NSURL*)URL error:(NSError **)error {
-  return [[self alloc] initWithURL:URL error:error];
+
+@synthesize track = track_;
+@synthesize current = current_;
+@synthesize assets = assets_;
+@synthesize player = player_;
+
+// Class method that create a new instance using an array of resources.
++ (MusePlayer *) playerWithResources:(NSArray*)resources
+  error:(NSError **)error {
+  return [[self alloc] initWithResources:resources error:error];
 }
-// The `initWithURL:error:` method tests if the `URL` is reachable
-// and add a new asset if no errors were raised.
-- (id) initWithURL:(NSURL*)URL error:(NSError **)error {
-  self = [super init];
-  if(self && [URL checkResourceIsReachableAndReturnError:error]){
-    [self addAssetWithURL:URL error:error];
-    // Call the `prepareToPlay` method to set the player
-    // and start the buffering of the asset.
-    [self prepareToPlay];
+// The `initWithResources:error:` method create a NSURL for each resources
+// and add a new asset for each reachable `URL`.
+- (id) initWithResources:(NSArray*)resources error:(NSError **)error {
+  if(self = [super init]){
+    self.assets = @[];
+    for (NSString* path in resources) {
+      NSURL* url = [NSURL fileURLWithPath:path isDirectory:NO];
+      if([url checkResourceIsReachableAndReturnError:error]){
+        [self addAssetWithURL:url error:error];
+      }
+    }
+    if([self.assets count] > 0){
+      // TO_FIX find a better way to log benign errors.
+      error = nil;
+      // Call the `prepareToPlayTrackAt:` method to set the player
+      // and start the buffering of the asset.
+      [self prepareToPlayTrackAt:0];
+    }
   }
   return self;
 }
 // Create an asset using its url and a pointer to a `NSError` instance.
 - (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error {
-  self.currentSong = [MuseAsset museAssetWithURL:URL];
+  MuseAsset *asset = [MuseAsset museAssetWithURL:URL];
   // Return an error if the file has no length.
-  if(self.currentSong.length == 0){
+  if(asset.length == 0){
     *error = [NSError museErrorFileType];
+  } else {
+    self.assets = [self.assets arrayByAddingObject: asset];
   }
 }
 // Create an audio player and prepare it to read the asset.
-- (BOOL)prepareToPlay {
-  player = [[AVAudioPlayer alloc] initWithContentsOfURL:self.currentSong.URL error:nil];
-  return [player prepareToPlay];
+- (BOOL)prepareToPlayTrackAt:(int)track {
+  // Assign current asset.
+  self.track = track;
+  self.current = self.assets[self.track];
+  // Stop reading.
+  [self.player stop];
+  // Remove the reference to the delegate of the player.
+  self.player.delegate = nil;
+  // Instantiate a new player wuth the current url.
+  self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:self.current.URL error:nil];
+  // Set the delegate of the player to the instance of the MusePlayer.
+  self.player.delegate = self;
+  // Prepare the player to read the asset.
+  return [self.player prepareToPlay];
 }
 // Wrapper around the `isPlaying` method of the player.
 - (BOOL)isPlaying {
-  return [player isPlaying];
+  return [self.player isPlaying];
 }
 // Wrapper around the `play` method of the player.
 - (BOOL)play {
-  return [player play];
+  return [self.player play];
 }
+// Wrapper around the `pause` method of the player.
+- (void)pause {
+  [self.player pause];
+}
+// Jump to previous song.
+- (BOOL)previous {
+  BOOL state;
+  if(self.track != 0){
+    state = [self prepareToPlayTrackAt: self.track - 1];
+  }
+  return state;
+}
+// Jump to next song.
+- (BOOL)next {
+  BOOL state;
+  if(self.track != [self.assets count] - 1){
+    state = [self prepareToPlayTrackAt: self.track + 1];
+  }
+  return state;
+}
+// Methods required by the `AVAudioPlayerDelegate` protocol.
+- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
+  error:(NSError *)error {}
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
+  successfully:(BOOL)flag {}
 @end
 
 // ## Main function
 int main (int argc, const char * argv[]) {
-    @autoreleasepool {
-        // Get the arguments from the command line. **muse** accepts
-        // either a help option (`[-h|--help]`) or a file.
-        NSArray* arguments = [[NSProcessInfo processInfo] arguments];
-        // Test if the help option (`[-h|--help]`) is present
-        // in the arguments list.
-        if([arguments containsObject:@"-h"]
-          || [arguments containsObject:@"--help"]){
-            ouptut(USAGE);
-            return 0;
-        }
-        int length = [arguments count];
-        // Return an error if no arguments were given.
-        if(length == 1){
-            ouptut([NSError museErrorInputFile].description);
-            return 1;
-        }
-        // Get the url of the media file.
-        // > TODO: add multiple file and directory handling.
-        NSURL* url = [NSURL fileURLWithPath:arguments[1]];
-        NSError* error = nil;
-        MusePlayer* muse = [MusePlayer playerWithURL:url error:&error];
+  int returnCode = 0;
+  @autoreleasepool {
+    // Get the arguments from the command line. **muse** accepts
+    // either a help option (`[-h|--help]`) or a file.
+    NSArray* arguments = [[NSProcessInfo processInfo] arguments];
+    int length = [arguments count];
+    // Test if the help option (`[-h|--help]`) is present
+    // in the arguments list.
+    if([arguments containsObject:@"-h"]
+      || [arguments containsObject:@"--help"]){
+      ouptut(USAGE);
+    } else if(length == 1){
+    // Return an error if no arguments were given.
+      NSError *error = [NSError museErrorInputFile];
+      ouptut(error.description);
+      returnCode = error.code;
+    } else {
+      // Create a range and derive a new array from the arguments,
+      // excluding the executable name.
+      NSRange range;
+      range.location = 1;
+      range.length = length - 1;
+      NSArray* resources = [arguments subarrayWithRange:range];
+      // Initialise the `MusePlayer` instance with the resources.
+      // TODO: add directory handling.
+      NSError* error = nil;
+      MusePlayer* muse = [MusePlayer playerWithResources:resources
+        error:&error];
+      if(error != nil){
         // Return an error if the file is not a media file.
-        if(error != nil){
-          ouptut(error.description);
-          return 1;
+        ouptut(error.description);
+        returnCode = error.code;
+      } else {
+        while(1){
+          // Print the informations to the command line.
+          ouptut(muse.current.label);
+          // Read the file and quit once its done.
+          [muse play];
+          while([muse isPlaying]);
+          if(![muse next]){
+            break;
+          }
         }
-        // Print the informations to the command line.
-        ouptut(muse.currentSong.label);
-        // Read the file and quit once its done.
-        [muse play];
-        while([muse isPlaying]);
+      }
     }
-    return 0;
+  }
+  return returnCode;
 }
 
 // ## Helpers functions
 
-// `ouput` send the `UTF8String` message to the the `NSString`
-// to print a string to the `stdout` using the `puts` function.
+// `ouput` prints a string to the `stdout` using the `UTF8String` property
+// of the `NSString` argument.
 void ouptut(NSString* string){
   puts(string.UTF8String);
 }

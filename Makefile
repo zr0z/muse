@@ -30,7 +30,7 @@ ifeq ($(shell type docco >/dev/null && echo "YES"), YES)
 	@cp muse.m muse.c
 	@docco muse.c
 	@rm muse.c
-	@sed -i "" "s/muse.c/muse.m/g" docs/muse.html
+	@sed -i "" "s/muse\.c/muse.m/g" docs/muse.html
 	@sed -i "" "s/$(string)/$(stringSub)/g" docs/muse.html
 	@sed -i "" "s/$(keyword)/$(keywordSub)/g" docs/muse.html
 	@sed -i "" "s/$(punctuation)/$(punctuationSub)/g" docs/muse.html
