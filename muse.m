@@ -29,8 +29,8 @@ void ouptut(NSString* string);
 // * `MPErrorInputFile` when no file is given in arguments.
 // * `MPErrorFileType` when the file can't be read.
 NSString *const MPErrorDomain = @"muse";
-NSString *const MPErrorInputFile = @"no input files.";
-NSString *const MPErrorFileType = @"muse can't handle this file.";
+NSString *const MPErrorInputFile = @"no input files.\n";
+NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 
 // ### Category interface.
 // Create a category on NSError for muse with two default class methods
@@ -67,6 +67,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // ## MuseAsset class
 
 // ### Class interface.
+
 // The `MuseAsset` class uses an instance of the `AVURLAsset` class
 // to extract some metadatas and store them as properties of the instance.
 //
@@ -84,11 +85,14 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 @property (assign, nonatomic) int length;
 @property (strong, nonatomic) NSString* artist;
 @property (strong, nonatomic) NSString* album;
-@property (strong, nonatomic) NSString* label;
 @property (strong, nonatomic) NSString* title;
 @property (strong, nonatomic) NSURL* URL;
 
-+ (MuseAsset *)museAssetWithURL:(NSURL *)URL;
++ (instancetype)museAssetWithURL:(NSURL *)URL;
+- (NSString*)labelForElapsedTime:(int)time;
+@end
+
+@interface MuseAsset()
 - (id)initWithURL:(NSURL *)URL;
 - (NSString *)metadataForKey:(NSString*)key inArray:(NSArray*)metadata;
 @end
@@ -96,15 +100,8 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 // ### Class implementation.
 @implementation MuseAsset
 
-@synthesize length = length_;
-@synthesize title  = title_;
-@synthesize artist = artist_;
-@synthesize album  = album_;
-@synthesize label  = label_;
-@synthesize URL    = URL_;
-
 // Class method that create a new instance using an URL.
-+ (MuseAsset *)museAssetWithURL:(NSURL *)URL {
++ (instancetype)museAssetWithURL:(NSURL *)URL {
   return [[self alloc] initWithURL:URL];
 }
 // The `initWithURL` initialize each properties using the asset instance.
@@ -132,19 +129,26 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
       self.artist = @"Unknown";
     }
     self.album = [self metadataForKey:@"albumName" inArray:metadata];
-    // Transform the track `length` (in seconds) in a duration in minutes
-    // and seconds, using a formated string.
-    NSString* durationString = [NSString stringWithFormat:@"%02d:%02d",
-      self.length / 60, self.length % 60];
-    // Compose the label property using the other properties.
-    self.label = [NSString stringWithFormat:@"%@ - %@ (%@)\n",
-      self.title, self.artist, durationString];
-    if(self.album != nil){
-      self.label = [self.label stringByAppendingFormat:@"%@\n",
-        self.album];
-    }
   }
   return self;
+}
+- (NSString*)labelForElapsedTime:(int)elapsedTime {
+  // Transform the track `length` (in seconds) in a duration in minutes
+  // and seconds, using a formated string.
+  NSString* format = @"%02d:%02d";
+  NSString* durationString = [NSString stringWithFormat:format,
+    self.length / 60, self.length % 60];
+  // Transformed the elapsed time using the same format.
+  NSString* elapsedString = [NSString stringWithFormat:format,
+    elapsedTime / 60, elapsedTime % 60];
+  // Compose the label property using the other properties.
+  format = @"%@ (%@/%@) - %@";
+  NSString* label = [NSString stringWithFormat: format,
+    self.title, elapsedString, durationString, self.artist];
+  if(self.album != nil){
+    label = [label stringByAppendingFormat:@" (%@)", self.album];
+  }
+  return label;
 }
 // Parse a `NSArray` of `AVMetadataItem` using a `NSString`
 // as the common key.
@@ -169,38 +173,39 @@ NSString *const MPErrorFileType = @"muse can't handle this file.";
 
 // It implements several methods that are just wrappers around the player
 // methods themselves.
-@interface MusePlayer : NSObject <AVAudioPlayerDelegate>
+@interface MusePlayer : NSObject
 
 @property (assign, nonatomic) int track;
-@property (strong, nonatomic) AVAudioPlayer *player;
 @property (strong, nonatomic) MuseAsset *current;
 @property (copy, nonatomic) NSArray *assets;
 
-+ (MusePlayer *) playerWithResources:(NSArray*)resources
++ (instancetype) playerWithResources:(NSArray*)resources
   error:(NSError **)error;
-- (id) initWithResources:(NSArray*)resources error:(NSError **)error;
-- (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error;
 - (BOOL)prepareToPlayTrackAt:(int)track;
 - (BOOL)isPlaying;
 - (BOOL)play;
 - (void)pause;
 - (BOOL)previous;
 - (BOOL)next;
-- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
-  error:(NSError *)error;
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
-  successfully:(BOOL)flag;
 @end
+
+@interface MusePlayer() <AVAudioPlayerDelegate>
+  @property (strong, nonatomic) AVAudioPlayer *player;
+
+  - (id) initWithResources:(NSArray*)resources error:(NSError **)error;
+  - (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error;
+  - (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
+    error:(NSError *)error;
+  - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
+    successfully:(BOOL)flag;
+@end
+
 // ### Class implementation.
 @implementation MusePlayer
 
-@synthesize track = track_;
-@synthesize current = current_;
-@synthesize assets = assets_;
-@synthesize player = player_;
-
-// Class method that create a new instance using an array of resources.
-+ (MusePlayer *) playerWithResources:(NSArray*)resources
+// Factory class method that create a new instance using an array
+// of resources.
++ (instancetype) playerWithResources:(NSArray*)resources
   error:(NSError **)error {
   return [[self alloc] initWithResources:resources error:error];
 }
@@ -321,12 +326,17 @@ int main (int argc, const char * argv[]) {
         ouptut(error.description);
         returnCode = error.code;
       } else {
+        int elapsedTime, currentTime;
         while(1){
-          // Print the informations to the command line.
-          ouptut(muse.current.label);
           // Read the file and quit once its done.
           [muse play];
-          while([muse isPlaying]);
+          while([muse isPlaying]){
+            currentTime = [muse.player currentTime];
+            if(elapsedTime != currentTime){
+              elapsedTime = currentTime;
+              ouptut([muse.current labelForElapsedTime:elapsedTime]);
+            }
+          };
           if(![muse next]){
             break;
           }
@@ -342,6 +352,7 @@ int main (int argc, const char * argv[]) {
 // `ouput` prints a string to the `stdout` using the `UTF8String` property
 // of the `NSString` argument.
 void ouptut(NSString* string){
-  puts(string.UTF8String);
+  fprintf(stdout, "\r%-72s", string.UTF8String);
+  fflush(stdout);
 }
 // Copyright (c) 2012 Zaidin Amiot.
