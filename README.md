@@ -52,7 +52,7 @@ Roadmap
 Changelog
 ---------
 
-* 0.4, `wasd` controls for quit, next, pause/play, previous; switched to automatic synthesize for the properties. 
+* 0.4, `wasd` controls for quit, next, pause/play, previous; switch to automatic synthesize for the properties; add `ncurses` for keys and screen handling.
 * 0.3, Multiple songs support, rewrite code according to [The Code Commandments](http://ironwolf.dangerousgames.com/blog/archives/913) best practices for Objective-C coding.
 * 0.2, switch to a more classical Objective-C OOP structure.
 * 0.1, initial release, quick and dirty Objective-C command line application.
