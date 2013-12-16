@@ -1,14 +1,14 @@
 muse
 ====
 
-**muse** is a stupid command line mp3 player for osx. It is built in Objective-C on top of the `AVFoundation` framework. 
-The only external library required is `ncurses` that comes bundled with OSX.
+**muse** is a stupid command line mp3 player for OS X. It is built in Objective-C on top of the `AVFoundation` framework. 
+The only external library required is `ncurses` that comes bundled with OS X.
 
 **muse** is released under the MIT license.
 
 Since version 0.3, **muse** is a bit smarter and you can read multiple mp3 files using a wildcard (such as `*.mp3`) on the command line or passing several files as arguments.
 
-Since version 0.4, **muse** accepts `wads` commands:
+Since version 0.4, **muse** accepts `wasd` commands:
 
 - `w` will quit muse,
 - `a` will play the previous song,
@@ -18,7 +18,7 @@ Since version 0.4, **muse** accepts `wads` commands:
 Installation
 ------------
 
-You will need OSX 10.7+ and the latest XCode command line tools (with LLVM 4.0+ as I rely on automatic synthesize for the properties).
+You will need OS X 10.7+ and the latest XCode command line tools (with LLVM 4.0+ as I rely on automatic synthesize for the properties).
 
 ### One-line install
 
