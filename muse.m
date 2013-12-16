@@ -1,12 +1,12 @@
-// muse 0.3,
+// muse 0.4,
 // the stupid command line mp3 player for osx.
 
 // *muse may be freely distributed under the MIT license.*
 
-// Frameworks: *Foundation*, *AVFoundation*
+// Frameworks: *Foundation*, *AVFoundation*, *ncurses*
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
-
+#include <curses.h>
 // Uses arc memory management.
 
 // Uses [The Code Commandments](http://ironwolf.dangerousgames.com/blog/archives/913) best practices for Objective-C coding.
@@ -18,7 +18,7 @@
 #define USAGE @"usage: muse [-h|--help] <music files>"
 
 // `output` is an helper function to display `NSString` on `stdout`.
-void ouptut(NSString* string);
+void output(NSString* string);
 
 // ## Custom Errors
 
@@ -60,7 +60,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 // and the `NSLocalizedDescriptionKey`.
 - (NSString *)description {
   return [NSString stringWithFormat:@"%@: error: %@", self.domain,
-      self.localizedDescription];
+    self.localizedDescription];
 }
 @end
 
@@ -81,7 +81,6 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 // * `label`, label constructed from the other properties,
 // * `title`, title of the asset if present in the `commonMetadata`.
 @interface MuseAsset : NSObject
-
 @property (assign, nonatomic) int length;
 @property (strong, nonatomic) NSString* artist;
 @property (strong, nonatomic) NSString* album;
@@ -104,7 +103,8 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 + (instancetype)museAssetWithURL:(NSURL *)URL {
   return [[self alloc] initWithURL:URL];
 }
-// The `initWithURL` initialize each properties using the asset instance.
+// The `initWithURL` method initialize each properties
+// using the asset instance.
 - (id)initWithURL:(NSURL *)URL {
   self = [super init];
   // Create the `AVURLAsset` instance using the `URL`.
@@ -172,31 +172,39 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 // and controling the `AVAudioPlayer` instance.
 
 // It implements several methods that are just wrappers around the player
-// methods themselves.
+// methods.
 @interface MusePlayer : NSObject
 
-@property (assign, nonatomic) int track;
 @property (strong, nonatomic) MuseAsset *current;
 @property (copy, nonatomic) NSArray *assets;
 
 + (instancetype) playerWithResources:(NSArray*)resources
   error:(NSError **)error;
-- (BOOL)prepareToPlayTrackAt:(int)track;
 - (BOOL)isPlaying;
-- (BOOL)play;
+- (void)play;
 - (void)pause;
+- (void)toggle;
+- (void)stop;
 - (BOOL)previous;
 - (BOOL)next;
+- (int)currentTrack;
+- (int)totalTracks;
 @end
 
+// Let's use a `category` to obfuscate our private properties
+// and methods
 @interface MusePlayer() <AVAudioPlayerDelegate>
+  @property (assign, nonatomic) int track;
+  @property (assign, nonatomic) BOOL isPaused;
   @property (strong, nonatomic) AVAudioPlayer *player;
 
-  - (id) initWithResources:(NSArray*)resources error:(NSError **)error;
-  - (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error;
-  - (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
+- (BOOL)prepareToPlayTrackAt:(int)track;
+- (BOOL)playTrackAt:(int)track;
+- (id) initWithResources:(NSArray*)resources error:(NSError **)error;
+- (void)addAssetWithURL:(NSURL*)URL error:(NSError **)error;
+- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
     error:(NSError *)error;
-  - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
     successfully:(BOOL)flag;
 @end
 
@@ -223,6 +231,7 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
     if([self.assets count] > 0){
       // TO_FIX find a better way to log benign errors.
       error = nil;
+
       // Call the `prepareToPlayTrackAt:` method to set the player
       // and start the buffering of the asset.
       [self prepareToPlayTrackAt:0];
@@ -242,47 +251,75 @@ NSString *const MPErrorFileType = @"muse can't handle this file.\n";
 }
 // Create an audio player and prepare it to read the asset.
 - (BOOL)prepareToPlayTrackAt:(int)track {
-  // Assign current asset.
+  // We start with a basic check to avoid range errors.
+  if(track < 0 || track > [self.assets count] - 1){
+    return NO;
+  }
+  // Assign the current asset and initialize a few properties.
   self.track = track;
   self.current = self.assets[self.track];
-  // Stop reading.
+  self.isPaused = NO;
+  // Stop reading any asset that could be already loaded.
   [self.player stop];
   // Remove the reference to the delegate of the player.
   self.player.delegate = nil;
-  // Instantiate a new player wuth the current url.
+  // Instantiate a new player with the current url.
   self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:self.current.URL error:nil];
   // Set the delegate of the player to the instance of the MusePlayer.
   self.player.delegate = self;
   // Prepare the player to read the asset.
   return [self.player prepareToPlay];
 }
+// Play the track at the specified index.
+- (BOOL)playTrackAt:(int)track {
+  if([self prepareToPlayTrackAt:track]){
+    [self play];
+    return YES;
+  }
+  return NO;
+}
 // Wrapper around the `isPlaying` method of the player.
+// We also return true if the music is just paused.
 - (BOOL)isPlaying {
-  return [self.player isPlaying];
+  return [self.player isPlaying] || self.isPaused;
 }
 // Wrapper around the `play` method of the player.
-- (BOOL)play {
-  return [self.player play];
+- (void)play {
+  [self.player play];
+  self.isPaused = NO;
 }
 // Wrapper around the `pause` method of the player.
 - (void)pause {
   [self.player pause];
+  self.isPaused = YES;
 }
-// Jump to previous song.
+// Toggle between `play` and `pause` state.
+- (void)toggle {
+  if(self.isPaused){
+    [self play];
+  } else {
+    [self pause];
+  }
+}
+// Wrapper around the `stop` method of the player.
+- (void)stop {
+  [self.player stop];
+}
+// Jump to the previous song.
 - (BOOL)previous {
-  BOOL state;
-  if(self.track != 0){
-    state = [self prepareToPlayTrackAt: self.track - 1];
-  }
-  return state;
+  return [self playTrackAt: self.track - 1];
 }
-// Jump to next song.
+// Jump to the next song.
 - (BOOL)next {
-  BOOL state;
-  if(self.track != [self.assets count] - 1){
-    state = [self prepareToPlayTrackAt: self.track + 1];
-  }
-  return state;
+  return [self playTrackAt: self.track + 1];
+}
+// Return the current track.
+- (int)currentTrack {
+  return self.track;
+}
+// Return the total number of tracks.
+- (int)totalTracks {
+  return [self.assets count];
 }
 // Methods required by the `AVAudioPlayerDelegate` protocol.
 - (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
@@ -303,11 +340,11 @@ int main (int argc, const char * argv[]) {
     // in the arguments list.
     if([arguments containsObject:@"-h"]
       || [arguments containsObject:@"--help"]){
-      ouptut(USAGE);
+      output(USAGE);
     } else if(length == 1){
     // Return an error if no arguments were given.
       NSError *error = [NSError museErrorInputFile];
-      ouptut(error.description);
+      output(error.description);
       returnCode = error.code;
     } else {
       // Create a range and derive a new array from the arguments,
@@ -321,29 +358,96 @@ int main (int argc, const char * argv[]) {
       NSError* error = nil;
       MusePlayer* muse = [MusePlayer playerWithResources:resources
         error:&error];
+
       if(error != nil){
-        // Return an error if the file is not a media file.
-        ouptut(error.description);
+        //  Exit with an error if the first file is not a media file.
+        output(error.description);
         returnCode = error.code;
       } else {
+        // These variables will store the current and elapsed time.
+        // The screen will be redrawn only if the values are not equals.
         int elapsedTime, currentTime;
-        while(1){
-          // Read the file and quit once its done.
-          [muse play];
-          while([muse isPlaying]){
+
+        // `control` will hold the character pressed, if any.
+        char control;
+
+        // The status variable for the main application loop,
+        // terminate the app if set to `NO`.
+        BOOL isPlaying = YES;
+
+        // Initialise `ncurses` with the usual functions.
+        // First, initialise the screen.
+        initscr();
+        // Set a default timeout in order to avoid blocking the reading
+        // loop while calling the `getch` function.
+        timeout(100);
+        // Then specify that we want to get characters as soon as they
+        // are typed.
+        cbreak();
+        // But we don't want any visual feedback.
+        noecho();
+
+        // Start reading the assets.
+        [muse play];
+        // Let's start the main application loop.
+        while(isPlaying){
+          // Listen to the key pressed while the music is playing.
+          while((control = getch()) && [muse isPlaying]){
             currentTime = [muse.player currentTime];
+            // We redraw the screen only every seconds.
             if(elapsedTime != currentTime){
               elapsedTime = currentTime;
-              ouptut([muse.current labelForElapsedTime:elapsedTime]);
+              // First we construct the label that will be displayed.
+              NSString* string = [muse.current labelForElapsedTime:elapsedTime];
+              string = [NSString stringWithFormat:@"%d/%d %@",
+                                 [muse currentTrack] + 1,
+                                 [muse totalTracks],
+                                 string];
+              // Then we clear the screen.
+              erase();
+              // And finaly we use a `ncurses` function to print
+              // the current track informations and the time elapsed.
+              mvprintw(0, 0, "%s", string.UTF8String);
             }
-          };
+
+            // Let's use `wasd` to control the player.
+            if(control == 'w'){
+              // `w` quit the player.
+              // First stop reading the current track.
+              [muse stop];
+              // Then set `isPlaying` to `NO` to exit the application loop.
+              isPlaying = NO;
+              // And finally exit the current reading loop.
+              break;
+            } else if(control == 'a'){
+              // `a` play previous track.
+              [muse previous];
+              // Set current time to a negative number in order
+              // to force next redraw.
+              currentTime = -1;
+            } else if(control == 's'){
+              // `s` toggle pause/play.
+              [muse toggle];
+            } else if(control == 'd'){
+              // `d` play next track.
+              [muse next];
+              // Set current time to a negative number in order
+              // to force next redraw.
+              currentTime = -1;
+            }
+          }
+          // If we don't have any tracks in the queue, we stop the
+          // application loop.
           if(![muse next]){
-            break;
+            isPlaying = NO;
           }
         }
       }
     }
   }
+  // Let's be gentle and clean the screen before exiting.
+  erase();
+  endwin();
   return returnCode;
 }
 
@@ -351,7 +455,7 @@ int main (int argc, const char * argv[]) {
 
 // `ouput` prints a string to the `stdout` using the `UTF8String` property
 // of the `NSString` argument.
-void ouptut(NSString* string){
+void output(NSString* string){
   fprintf(stdout, "\r%-72s", string.UTF8String);
   fflush(stdout);
 }

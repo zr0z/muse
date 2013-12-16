@@ -3,6 +3,7 @@ TARGET = $(basename $(SOURCE))
 CFLAGS = -ObjC -fobjc-arc
 CC = clang
 FRAMEWORK = -framework Foundation -framework AVFoundation
+LIBRARY = -lncurses
 # subsitution for documentation
 # TO_FIX
 string=<span class=\"err\">@<\/span><span class=\"s\">
@@ -19,7 +20,7 @@ analyze:
 
 make: $(SOURCE)
 	@mkdir -p ./build
-	$(CC) $(CFLAGS) $(FRAMEWORK) $(SOURCE) -o ./build/$(TARGET)
+	$(CC) $(CFLAGS) $(LIBRARY) $(FRAMEWORK) $(SOURCE) -o ./build/$(TARGET)
 
 clean:
 	@rm -rf ./build
@@ -27,10 +28,10 @@ clean:
 documentation:
 # Really need to write a docco for ObjC
 ifeq ($(shell type docco >/dev/null && echo "YES"), YES)
-	@cp muse.m muse.c
-	@docco muse.c
-	@rm muse.c
-	@sed -i "" "s/muse\.c/muse.m/g" docs/muse.html
+	@cp muse.m muse.js
+	@docco muse.js
+	@rm muse.js
+	@sed -i "" "s/muse\.js/muse.m/g" docs/muse.html
 	@sed -i "" "s/$(string)/$(stringSub)/g" docs/muse.html
 	@sed -i "" "s/$(keyword)/$(keywordSub)/g" docs/muse.html
 	@sed -i "" "s/$(punctuation)/$(punctuationSub)/g" docs/muse.html
